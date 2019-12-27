@@ -16,36 +16,55 @@ pub enum Keep {
 }
 
 #[derive(Clone, Debug)]
-pub struct Roll {
-    num: u32,
-    die: u32,
-    reroll: Option<u32>,
-    modifier: Option<i32>,
-    keep: Option<Keep>,
-}
-
-#[derive(Clone, Debug)]
 pub struct Outcome {
-    rolls: Vec<u32>,
+    rolls: Vec<DieRoll>,
     modifier: i32,
     keep: Option<Keep>,
 }
 
+#[derive(Clone, Debug)]
+pub enum DieRoll {
+    Kept(u32),
+    Rerolled(u32, u32),
+}
+
+impl fmt::Display for DieRoll {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DieRoll::Kept(n) => write!(f, "{}", n),
+            DieRoll::Rerolled(old, new) => write!(f, "{}=>{}", old, new),
+        }
+    }
+}
+
+impl DieRoll {
+    pub fn value(&self) -> u32 {
+        match self {
+            DieRoll::Kept(n) => *n,
+            DieRoll::Rerolled(_, n) => *n,
+        }
+    }
+}
+
 impl fmt::Display for Outcome {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?} ", &self.rolls)?;
+        write!(f, "{} ", self.total())?;
+        let rolls: Vec<_> = self.rolls.iter().map(|roll| roll.to_string()).collect();
+        let rolls = rolls.join(", ");
+        write!(f, "({})", rolls)?;
         if self.modifier > 0 {
-            write!(f, "+ {} ", self.modifier)?;
+            write!(f, " + {}", self.modifier)
         } else if self.modifier < 0 {
-            write!(f, "- {} ", -self.modifier)?;
+            write!(f, " - {}", -self.modifier)
+        } else {
+            Ok(())
         }
-        write!(f, "= {}", self.total())
     }
 }
 
 impl Outcome {
-    pub fn new(mut rolls: Vec<u32>, keep: Option<Keep>, modifier: i32) -> Outcome {
-        rolls.sort();
+    pub fn new(mut rolls: Vec<DieRoll>, keep: Option<Keep>, modifier: i32) -> Outcome {
+        rolls.sort_by(|a, b| a.value().cmp(&b.value()));
         Outcome {
             rolls,
             keep,
@@ -60,7 +79,49 @@ impl Outcome {
             Some(Keep::Low(n)) => &self.rolls[..*n],
             None => &self.rolls[..],
         };
-        range.into_iter().sum::<u32>() as i32 + self.modifier
+        range.into_iter().map(|roll| roll.value()).sum::<u32>() as i32 + self.modifier
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Roll {
+    num: u32,
+    die: u32,
+    reroll: Option<u32>,
+    modifier: Option<i32>,
+    keep: Option<Keep>,
+}
+
+impl fmt::Display for Roll {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.num > 1 {
+            write!(f, "{}", self.num)?;
+        }
+
+        write!(f, "d{}", self.die)?;
+
+        if let Some(n) = self.reroll {
+            write!(f, "r{}", n)?;
+        }
+
+        if let Some(keep) = &self.keep {
+            match keep {
+                Keep::High(n) => {
+                    write!(f, "h{}", n)?;
+                }
+                Keep::Low(n) => {
+                    write!(f, "l{}", n)?;
+                }
+            }
+        }
+
+        if let Some(modifier) = self.modifier {
+            if modifier != 0 {
+                write!(f, "{:+}", modifier)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -138,9 +199,23 @@ impl str::FromStr for Roll {
             }
             Ok(roll)
         } else {
+            println!("{}", input);
             Err("Something went wrong.")
         }
     }
+}
+
+fn expected_roll(die: u32, reroll: Option<u32>) -> f64 {
+    let reroll = reroll.unwrap_or(die + 1);
+    let avg = (die as f64 / 2.0) + 0.5;
+    let total = (1..=die)
+        .map(|n| if n <= reroll { avg } else { n as f64 })
+        // .map(|n| {
+        //     println!("out: {} ({})", n, avg);
+        //     n
+        // })
+        .sum::<f64>();
+    total / (die as f64)
 }
 
 impl Roll {
@@ -164,19 +239,35 @@ impl Roll {
         rng.gen_range(0, self.die) + 1
     }
 
+    pub fn expected_total(&self) -> f64 {
+        let num_dice = self
+            .keep
+            .as_ref()
+            .map(|keep| match keep {
+                Keep::High(n) => *n,
+                Keep::Low(n) => *n,
+            })
+            .unwrap_or(self.num as usize) as f64;
+        expected_roll(self.die, self.reroll) * num_dice + (self.modifier.unwrap_or(0) as f64)
+    }
+
     pub fn roll(&self, mut rng: impl Rng) -> Outcome {
         let mut rolls = Vec::with_capacity(self.num as usize);
 
         // Roll the dice
         for _ in 0..self.num {
-            let mut roll = self.base_roll(&mut rng);
-
             // Check if we need to reroll
-            if let Some(reroll) = self.reroll {
-                if roll <= reroll {
-                    roll = self.base_roll(&mut rng);
-                }
-            }
+            let original_roll = self.base_roll(&mut rng);
+            let roll = self
+                .reroll
+                .map(|reroll| {
+                    if original_roll <= reroll {
+                        DieRoll::Rerolled(original_roll, self.base_roll(&mut rng))
+                    } else {
+                        DieRoll::Kept(original_roll)
+                    }
+                })
+                .unwrap_or_else(|| DieRoll::Kept(original_roll));
 
             // Add the roll
             rolls.push(roll);

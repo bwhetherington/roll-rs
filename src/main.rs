@@ -1,7 +1,12 @@
 mod roll;
 use rand::prelude::*;
 use roll::{Keep, Roll};
-use std::{collections::HashMap, env};
+use std::{
+    collections::HashMap,
+    env,
+    fs::File,
+    io::{self, BufRead, BufReader},
+};
 
 #[macro_use]
 extern crate lazy_static;
@@ -34,34 +39,75 @@ lazy_static! {
     };
 }
 
-fn parse_rolls(args: impl Iterator<Item = String>) -> Result<Vec<Roll>, &'static str> {
-    let mut rolls: Vec<Roll> = vec![];
-    for arg in args.skip(1) {
-        // Look it up in macros
-        if let Some(sub_rolls) = MACROS.get(&arg) {
-            for roll in sub_rolls {
-                rolls.push(roll.clone());
-            }
-        } else {
-            // Try to parse it
-            let roll = arg.parse()?;
-            rolls.push(roll);
+struct Context {
+    macros: HashMap<String, Vec<Roll>>,
+}
+
+impl Context {
+    fn new() -> Context {
+        Context {
+            macros: HashMap::new(),
         }
     }
 
-    Ok(rolls)
-}
+    fn load_macros(&mut self, path: &str) -> io::Result<()> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
 
-fn process_rolls(rolls: Vec<Roll>) {
-    let mut rng = thread_rng();
-    for roll in rolls {
-        println!("{}", roll.roll(&mut rng));
+        for line in reader.lines() {
+            let line = line?;
+            let mut iter = line.split_whitespace();
+            let name = iter.next().unwrap();
+            let rolls = iter.map(|roll| roll.to_string());
+            let rolls = self.parse_rolls(rolls).expect("Parsing error.");
+            self.macros.insert(name.to_string(), rolls);
+        }
+
+        Ok(())
+    }
+
+    fn parse_rolls(&self, args: impl Iterator<Item = String>) -> Result<Vec<Roll>, &'static str> {
+        let mut rolls: Vec<Roll> = vec![];
+        for arg in args {
+            // Look it up in macros
+            if let Some(sub_rolls) = self.macros.get(&arg) {
+                for roll in sub_rolls {
+                    rolls.push(roll.clone());
+                }
+            } else {
+                // Try to parse it
+                let roll = arg.parse()?;
+                rolls.push(roll);
+            }
+        }
+
+        Ok(rolls)
+    }
+
+    fn process_rolls(&self, rolls: Vec<Roll>) {
+        let mut rng = thread_rng();
+        let mut total = 0;
+        for roll in rolls.iter() {
+            let outcome = roll.roll(&mut rng);
+            total += outcome.total();
+            println!(
+                "{}: {} (Expected: {})",
+                roll,
+                outcome,
+                roll.expected_total()
+            );
+        }
+        if rolls.len() > 1 {
+            println!("Total: {}", total);
+        }
     }
 }
 
 fn main() {
-    match parse_rolls(env::args()) {
-        Ok(rolls) => process_rolls(rolls),
+    let mut context = Context::new();
+    context.load_macros("macros.txt").unwrap();
+    match context.parse_rolls(env::args().skip(1)) {
+        Ok(rolls) => context.process_rolls(rolls),
         Err(why) => println!("Error: {}", why),
     }
 }

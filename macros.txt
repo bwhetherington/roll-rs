@@ -1,0 +1,4 @@
+stats 4d6h3 4d6h3 4d6h3 4d6h3 4d6h3 4d6h3
+adv 2d20h1
+dis 2d20l1
+triple-adv adv adv adv
