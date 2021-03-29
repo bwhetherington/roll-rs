@@ -50,20 +50,16 @@ impl Context {
         }
     }
 
-    fn load_macros(&mut self, path: &str) -> io::Result<()> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
+    fn load_macros(&mut self) {
+        let macro_file = include_str!("../macros.txt");
 
-        for line in reader.lines() {
-            let line = line?;
+        for line in macro_file.lines() {
             let mut iter = line.split_whitespace();
             let name = iter.next().unwrap();
             let rolls = iter.map(|roll| roll.to_string());
             let rolls = self.parse_rolls(rolls).expect("Parsing error.");
             self.macros.insert(name.to_string(), rolls);
         }
-
-        Ok(())
     }
 
     fn parse_rolls(&self, args: impl Iterator<Item = String>) -> Result<Vec<Roll>, &'static str> {
@@ -105,7 +101,7 @@ impl Context {
 
 fn main() {
     let mut context = Context::new();
-    context.load_macros("macros.txt").unwrap();
+    context.load_macros();
     match context.parse_rolls(env::args().skip(1)) {
         Ok(rolls) => context.process_rolls(rolls),
         Err(why) => println!("Error: {}", why),

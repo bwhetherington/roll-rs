@@ -209,10 +209,6 @@ fn expected_roll(die: u32, reroll: Option<u32>) -> f64 {
     let avg = (die as f64 / 2.0) + 0.5;
     let total = (1..=die)
         .map(|n| if n <= reroll { avg } else { n as f64 })
-        // .map(|n| {
-        //     println!("out: {} ({})", n, avg);
-        //     n
-        // })
         .sum::<f64>();
     total / (die as f64)
 }
