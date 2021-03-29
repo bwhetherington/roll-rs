@@ -1,12 +1,12 @@
 [package]
-name = "roll"
-version = "0.1.0"
 authors = ["Benjamin Hetherington <b.w.hetherington@gmail.com>"]
 edition = "2018"
+name = "roll"
+version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-regex = "*"
-rand = "*"
-lazy_static = "*"
+lazy_static = "1.4.0"
+rand = "0.8.3"
+regex = "1.4.5"

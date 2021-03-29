@@ -2,8 +2,7 @@ use rand::prelude::*;
 use regex::Regex;
 use std::{fmt, str};
 
-pub const REGEX_STR: &'static str =
-    r"(?P<num>[0-9]*)d(?P<die>[0-9]+)(r(?P<reroll>[0-9]+))?((?P<high_or_low>[hl])(?P<keep>[0-9]+))?(?P<modifier>[\+\-][0-9]+)?";
+pub const REGEX_STR: &'static str = r"(?P<num>[0-9]*)d(?P<die>[0-9]+)(r(?P<reroll>[0-9]+))?((?P<high_or_low>[hl])(?P<keep>[0-9]+))?(?P<modifier>[\+\-][0-9]+)?";
 
 lazy_static! {
     static ref REGEX: Regex = Regex::new(REGEX_STR).unwrap();
@@ -236,7 +235,7 @@ impl Roll {
     }
 
     fn base_roll(&self, mut rng: impl Rng) -> u32 {
-        rng.gen_range(0, self.die) + 1
+        rng.gen_range(0..self.die) + 1
     }
 
     pub fn expected_total(&self) -> f64 {
